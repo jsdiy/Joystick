@@ -28,5 +28,5 @@ void	loop(void)
 	if (!isUpdated) { return; }
 
 	if (jstk.OnKeyPress(Key::A)) { Serial.println("Key::A - Press"); }
-	if (jstk.OnKeyHolding(Key::Up | Key::Left)) { Serial.println("Key::Up+Left - Holding"); }
+	if (jstk.IsKeyHolding(Key::Up | Key::Left)) { Serial.println("Key::Up+Left - Holding"); }
 }
