@@ -23,7 +23,7 @@ InputLibを応用したJoystickライブラリ
 ```
 lib_extra_dirs =
   ./lib/InputLib
-  ./lib/Jpystick
+  ./lib/Joystick
 ```
 
 ## 動作確認環境
