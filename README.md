@@ -1,7 +1,7 @@
 # Joystick
-InputLibを応用したJoystickライブラリ
-**このリポジトリは古いリポジトリです**
-**JoystickライブラリはGamePadLibプロジェクトへ統合されました**
+InputLibを応用したJoystickライブラリ  
+**【！！】このリポジトリは古いリポジトリです【！！】**  
+**【！！】JoystickライブラリはGamePadLibプロジェクトへ統合されました【！！】**
 
 ## 概要
 拙作InputLibを応用したジョイスティック（ゲームパッド）ライブラリです。
