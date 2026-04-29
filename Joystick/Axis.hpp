@@ -18,10 +18,10 @@ private:
 
 public:
 	Axis() {}
-	void	Initialize(gpio_num_t analogPin);	//PotMeterの同名関数を隠蔽
+	void	Initialize(gpio_num_t analogPin);	//基底クラスの同名関数を隠蔽
 	void	SetLongHoldThresholdTime(uint32_t millis) { longHoldThresholdTime = millis; }
-	int16_t	UpdateState();	//PotMeterの同名関数を隠蔽
-	HwSwitch::State	GetState(PotMeter::State& retKeyRange) { retKeyRange = keyRange; return keyState; }	//PotMeterの同名関数を隠蔽
+	int16_t	UpdateState();	//基底クラスの同名関数を隠蔽
+	HwSwitch::State	GetState(PotMeter::State& retKeyRange) { retKeyRange = keyRange; return keyState; }	//基底クラスの同名関数を隠蔽
 };
 
 /*	HwSwitch::State	GetState(PotMeter::State& retKeyRange) の説明

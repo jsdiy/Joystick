@@ -1,6 +1,7 @@
 //	ジョイスティック
 //	『昼夜逆転』工作室	@jsdiy	https://github.com/jsdiy
 //	2026/03	初版
+//	2026/04	派生クラスGamePadの都合に合わせた関数分割などの改造
 
 #pragma once
 
@@ -81,16 +82,11 @@ public:
 	
 public:
 	using	KeyState	= HwSwitch::State;
-	static	constexpr	uint32_t	KeyCombinationTime = 50;	//キーの同時押し許容時間(ms)　※デバウンス時間より長いこと
 
-private:
-	using	JStick	= Axis;	//PotMeter;
-	using	JButton	= HwSwitch;
-	JStick	axisX, axisY;
-	JButton	btnP, btnA, btnB, btnC;
-	std::unordered_map<KeyCode, JButton*>	buttons;
-	JButton*	GetButton(KeyCode key);
-	uint32_t	keyCombinationTime = KeyCombinationTime;
+protected:
+	Axis	axisX, axisY;	//アナログ入力
+	HwSwitch	btnP, btnA, btnB, btnC;	//デジタル入力
+	std::unordered_map<KeyCode, HwSwitch*>	buttons;
 	void	StickSensitivity(int8_t newtralRangeH, int8_t newtralRangeL);
 
 	CallbackContainer	pressCbs;
@@ -104,23 +100,25 @@ private:
 	std::atomic<int16_t>	adcValX{0}, adcValY{0};
 
 	Ticker	tkPolling;
-	uint32_t	pollingTime = keyCombinationTime;
+	uint32_t	pollingTime = DigitalInput::DebounceTimeMillis;
 	uint32_t	prevUpdateTime = 0;
 	volatile	bool	isUpdatedKeyState = false;
 	bool	keyEventTriggerEnabled = false;
 	void	UpdateStateAndSetBits();
+	virtual	void	UpdateState();
+	void	SetBits();
 	void	StartKeyMonitoring();	//キー入力監視を開始する
-	void	StopKeyMonitoring();	//キー入力監視を停止する　※Config()時に一旦停止させる必要がある
+	void	StopKeyMonitoring();	//キー入力監視を停止する　※XxxConfig()を再度設定する場合に必要
 
-	//アプリ側でこれらを使う場面はなさそう。とりあえずprivateとしておく
-	void	SetKeyCombinationTime(uint32_t millis) { pollingTime = keyCombinationTime = millis; }	//複数キーを何ミリ秒以内に押したら同時押しとするか
-	void	StickConfig(gpio_num_t axisX, gpio_num_t axisY, bool invertX, bool invertY, int8_t newtralRangeH, int8_t newtralRangeL);
-	void	ButtonConfig(gpio_num_t swP, gpio_num_t swA, gpio_num_t swB, gpio_num_t swC);
+	//アプリ側でこれらを使う場面はなさそう。とりあえずpublicから退避しておく
+	void	StickConfig(gpio_num_t pinAxisX, gpio_num_t pinAxisY, bool invertX, bool invertY, int8_t newtralRangeH, int8_t newtralRangeL);
+	void	ButtonConfig(gpio_num_t pinSwP, gpio_num_t pinSwA, gpio_num_t pinSwB, gpio_num_t pinSwC);
+	void	SetPollingTime(uint32_t millis) { pollingTime = millis; }	//キー入力監視間隔(ms)
 
 public:
 	Joystick() {}
-	void	Initialize(gpio_num_t axisX, gpio_num_t axisY, bool invertX, bool invertY, int8_t newtralRangeH, int8_t newtralRangeL,
-				gpio_num_t swP, gpio_num_t swA, gpio_num_t swB, gpio_num_t swC);
+	void	Initialize(gpio_num_t pinAxisX, gpio_num_t pinAxisY, bool invertX, bool invertY, int8_t newtralRangeH, int8_t newtralRangeL,
+				gpio_num_t pinSwP, gpio_num_t pinSwA, gpio_num_t pinSwB, gpio_num_t pinSwC);
 	void	SetLongHoldThresholdTime(uint32_t millis);
 
 	bool	CheckKeyState();

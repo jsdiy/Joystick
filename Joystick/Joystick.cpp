@@ -5,30 +5,29 @@
 #include "Joystick.hpp"
 
 //レバーとボタンを初期化する
-void	Joystick::Initialize(gpio_num_t axisX, gpio_num_t axisY, bool invertX, bool invertY, int8_t newtralRangeH, int8_t newtralRangeL,
-			gpio_num_t swP, gpio_num_t swA, gpio_num_t swB, gpio_num_t swC)
+void	Joystick::Initialize(gpio_num_t pinAxisX, gpio_num_t pinAxisY, bool invertX, bool invertY, int8_t newtralRangeH, int8_t newtralRangeL,
+			gpio_num_t pinSwP, gpio_num_t pinSwA, gpio_num_t pinSwB, gpio_num_t pinSwC)
 {
-	StickConfig(axisX, axisY, invertX, invertY, newtralRangeH, newtralRangeL);
-	ButtonConfig(swP, swA, swB, swC);
+	StickConfig(pinAxisX, pinAxisY, invertX, invertY, newtralRangeH, newtralRangeL);
+	ButtonConfig(pinSwP, pinSwA, pinSwB, pinSwC);
+	StartKeyMonitoring();
 }
 
 //レバーを初期化／再設定する
 //invertX:	左右方向を反転させる
 //invertY:	上下方向を反転させる
 //newtralRange:	レバーの感度(1～9)　中立から最大傾倒までのうち、何割までを中立の範囲とするか
-void	Joystick::StickConfig(gpio_num_t axisX, gpio_num_t axisY, bool invertX, bool invertY, int8_t newtralRangeH, int8_t newtralRangeL)
+void	Joystick::StickConfig(gpio_num_t pinAxisX, gpio_num_t pinAxisY, bool invertX, bool invertY, int8_t newtralRangeH, int8_t newtralRangeL)
 {
-	StopKeyMonitoring();
+	axisX.Initialize(pinAxisX);
+	axisY.Initialize(pinAxisY);
 
-	this->axisX.Initialize(axisX);
-	this->axisY.Initialize(axisY);
-
-	this->axisX.SetInverted(invertX ? this->axisX.AdcValueMax : 0);
-	this->axisY.SetInverted(invertY ? this->axisY.AdcValueMax : 0);
+	axisX.MilliVoltMode(true);
+	axisY.MilliVoltMode(true);
+	axisX.SetInverted(invertX ? Axis::AdcMaxMilliVolt : 0);
+	axisY.SetInverted(invertY ? Axis::AdcMaxMilliVolt : 0);
 
 	StickSensitivity(newtralRangeH, newtralRangeL);
-
-	StartKeyMonitoring();
 }
 
 //レバーの感度を設定する
@@ -58,32 +57,18 @@ void	Joystick::StickSensitivity(int8_t newtralRangeH, int8_t newtralRangeL)
 //ボタンを初期化／再設定する
 void	Joystick::ButtonConfig(gpio_num_t swP, gpio_num_t swA, gpio_num_t swB, gpio_num_t swC)
 {
-	StopKeyMonitoring();
-
-	//pinでbtnを初期化し、keyをキーにしてbtnを辞書登録する
-	auto ButtonEmplace = [this](gpio_num_t pin, JButton& btn, KeyCode key)
+	//pinでbtnを初期化し、keyをキーにして*btnを辞書登録する
+	auto ButtonEmplace = [this](gpio_num_t pin, HwSwitch& btn, KeyCode key)
 	{
 		if (pin == GPIO_NUM_NC) { this->buttons.emplace(key, nullptr); }
 		else { btn.Initialize(pin); this->buttons.emplace(key, &btn); }
 	};
 
 	buttons.clear();
-	ButtonEmplace(swP, this->btnP, KeyCode::P);
-	ButtonEmplace(swA, this->btnA, KeyCode::A);
-	ButtonEmplace(swB, this->btnB, KeyCode::B);
-	ButtonEmplace(swC, this->btnC, KeyCode::C);
-
-	StartKeyMonitoring();
-}
-
-//ボタンを取得する
-//・存在しないボタンキーの場合（ORされているなど）、nullptrを返す。
-//・有効なボタンキーでもボタン自体が無効の場合、結果的にnullptrが返る。
-//	例）ピンが設定されていないbtnCの実体はなくnullptr。→ButtonConfig()
-Joystick::JButton*	Joystick::GetButton(KeyCode key)
-{
-	auto iter = buttons.find(key);
-	return (iter == buttons.end()) ? nullptr : iter->second;
+	ButtonEmplace(swP, btnP, KeyCode::P);
+	ButtonEmplace(swA, btnA, KeyCode::A);
+	ButtonEmplace(swB, btnB, KeyCode::B);
+	ButtonEmplace(swC, btnC, KeyCode::C);
 }
 
 //キーを何ミリ秒押したら長押し成立とするか
@@ -125,7 +110,8 @@ void	Joystick::StopKeyMonitoring()
 
 //キー操作状態が更新されたか問い合わせる
 //戻り値：	true: キー状態が更新された,	false: キー状態に変化はなかった
-//・Tickerが各ステータスフラグを更新したタイミングでtrueが返る。
+//・キー入力監視のポーリング。loop()から呼び出す。
+//・Joystick内部でTickerが各ステータスフラグを更新したタイミングでtrueが返る。
 bool	Joystick::CheckKeyState()
 {
 	if (isUpdatedKeyState)
@@ -143,13 +129,35 @@ bool	Joystick::CheckKeyState()
 //・Tickerから呼ばれる。この関数はアプリ側には公開しない。
 void	Joystick::UpdateStateAndSetBits()
 {
-//auto startMs = millis();
-
 	//キー入力状態を更新する
+	UpdateState();
+
+	//キーの押下状態をスキャンする
+	SetBits();
+
+	//コールバックを実行する
+	if (keyEventTriggerEnabled)
+	{
+		pressCbs.Fire(onPressBits);
+		longPressCbs.Fire(onLongPressBits);
+		releaseCbs.Fire(onReleaseBits);
+	}
+
+	//キー状態を更新したことのフラグを立てる
+	isUpdatedKeyState = true;
+}
+
+//キー入力状態を更新する
+void	Joystick::UpdateState()
+{
 	adcValX = axisX.UpdateState();
 	adcValY = axisY.UpdateState();
 	for (auto& pair : buttons) { if (pair.second) { pair.second->UpdateState(); } }
+}
 
+//キーの押下状態をスキャンする
+void	Joystick::SetBits()
+{
 	//キーのオン状態をスキャンする
 	keyHoldingBits = 0;
 	if (axisX.IsHighRange()) { keyHoldingBits |= KeyCode::Right; }
@@ -161,8 +169,8 @@ void	Joystick::UpdateStateAndSetBits()
 		if (pair.second && pair.second->IsSwOn()) { keyHoldingBits |= pair.first; }
 	}
 
-	using	AState = JStick::State;
-	using	DState = JButton::State;
+	using	AState = Axis::State;
+	using	DState = HwSwitch::State;
 
 	auto ScanButtonsEvent = [this](DState eventCode, std::atomic<uint16_t>& bitFlags)
 	{
@@ -172,7 +180,7 @@ void	Joystick::UpdateStateAndSetBits()
 		}
 	};
 
-	auto StickEvent = [](DState eventCode, std::atomic<uint16_t>& bitFlags, JStick& axis, KeyCode highKey, KeyCode lowKey)
+	auto StickEvent = [](DState eventCode, std::atomic<uint16_t>& bitFlags, Axis& axis, KeyCode highKey, KeyCode lowKey)
 	{
 		AState keyHint;
 		if (axis.GetState(keyHint) != eventCode) { return; }
@@ -203,19 +211,6 @@ void	Joystick::UpdateStateAndSetBits()
 	//キーを放したイベントの発生をスキャンする
 	onReleaseBits = 0;
 	ScanKeyEvent(DState::Release, onReleaseBits);
-
-	//コールバックを実行する
-	if (keyEventTriggerEnabled)
-	{
-		pressCbs.Fire(onPressBits);
-		longPressCbs.Fire(onLongPressBits);
-		releaseCbs.Fire(onReleaseBits);
-	}
-
-	//キー状態を更新したことのフラグを立てる
-	isUpdatedKeyState = true;
-
-//Serial.printf("UpdateStateAndSetBits(): %d ms\n", millis() - startMs);	//1ms以下だった
 }
 
 bool	Joystick::OnKeyPress(KeyCode keys) { return (onPressBits & keys) == keys; }
